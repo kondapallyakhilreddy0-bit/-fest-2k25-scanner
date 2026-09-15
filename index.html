@@ -1,12 +1,9 @@
-
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FEST 2K25 ENTRY SCANNER</title>
-
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -15,22 +12,14 @@
       padding: 20px;
       background: #f5f5f5;
     }
-
-    h1 {
-      margin: 5px;
-    }
-
-    h2 {
-      margin: 5px 0 20px;
-    }
-
+    h1 { margin: 5px; }
+    h2 { margin: 5px 0 20px; }
     #reader {
       width: 100%;
       max-width: 450px;
       margin: auto;
       background: white;
     }
-
     #result {
       max-width: 450px;
       margin: 20px auto;
@@ -39,124 +28,102 @@
       background: white;
       font-size: 20px;
     }
-
     .allowed {
       background: #d9fdd3 !important;
       color: #087f23;
     }
-
     .denied {
       background: #ffd6d6 !important;
       color: #b00020;
     }
-
     .name {
       font-size: 24px;
       font-weight: bold;
       margin: 10px 0;
     }
-
     .pass {
       font-size: 18px;
       margin-top: 8px;
     }
   </style>
 </head>
-
 <body>
-
 <h1>FEST 2K25</h1>
 <h2>ENTRY SCANNER</h2>
-
 <div id="reader"></div>
-
 <div id="result">
   📷 Starting camera...
 </div>
-
 <script>
-
 const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbypJ4FqT8xtThzpohlhwwPF8Om_LHH7ZNBFwYYHjRbJkS6jdX2TBqKUX_0BJ0IdSBqG/exec";
-
-let scanner;
+let scanner = null;
 let processing = false;
-
-
+/* START CAMERA */
 function startScanner() {
-
   scanner = new Html5Qrcode("reader");
-
   scanner.start(
     { facingMode: "environment" },
     {
-      fps: 10,
-      qrbox: 250
+      fps: 15,
+      qrbox: {
+        width: 300,
+        height: 300
+      }
     },
-
     function(decodedText) {
-
       if (processing) return;
-
       processing = true;
-
       document.getElementById("result").innerHTML =
         "🔍 Checking...";
-
-      scanner.stop().then(function() {
-
-        checkPass(decodedText);
-
+      /*
+       * Try to stop camera.
+       * If stop fails or gets stuck, continue anyway.
+       */
+      const stopPromise = scanner.stop();
+      const timeout = new Promise(function(resolve) {
+        setTimeout(resolve, 500);
       });
-
+      Promise.race([stopPromise, timeout])
+        .then(function() {
+          checkPass(decodedText);
+        })
+        .catch(function() {
+          checkPass(decodedText);
+        });
     },
-
     function(errorMessage) {
       // Ignore normal scanning errors
     }
-
   ).then(function() {
-
-    document.getElementById("result").innerHTML =
-      "📷 Point camera at QR";
-
+    if (!processing) {
+      document.getElementById("result").innerHTML =
+        "📷 Point camera at QR";
+    }
   }).catch(function(error) {
-
     document.getElementById("result").innerHTML =
       "❌ CAMERA ERROR<br><br>" + error;
-
   });
-
 }
-
-
+/* CHECK PASS */
 function checkPass(passId) {
-
   const callbackName =
     "qrCallback_" + Date.now();
-
+  let finished = false;
   window[callbackName] = function(result) {
-
+    if (finished) return;
+    finished = true;
     delete window[callbackName];
-
     showResult(result);
-
     setTimeout(function() {
-
       processing = false;
-
+      document.getElementById("result").className = "";
       document.getElementById("result").innerHTML =
         "📷 Ready for next QR";
-
       startScanner();
-
     }, 2500);
-
   };
-
-
   const script = document.createElement("script");
-
   script.src =
     SCRIPT_URL +
     "?action=checkPass" +
@@ -164,22 +131,48 @@ function checkPass(passId) {
     encodeURIComponent(passId) +
     "&callback=" +
     callbackName;
-
+  script.onerror = function() {
+    if (finished) return;
+    finished = true;
+    delete window[callbackName];
+    document.getElementById("result").className = "denied";
+    document.getElementById("result").innerHTML =
+      "❌ CONNECTION ERROR<br><br>" +
+      "Unable to contact entry server.";
+    setTimeout(function() {
+      processing = false;
+      document.getElementById("result").className = "";
+      document.getElementById("result").innerHTML =
+        "📷 Ready for next QR";
+      startScanner();
+    }, 2500);
+  };
   document.body.appendChild(script);
-
+  /*
+   * If server doesn't respond within 8 seconds
+   */
+  setTimeout(function() {
+    if (finished) return;
+    finished = true;
+    delete window[callbackName];
+    document.getElementById("result").className = "denied";
+    document.getElementById("result").innerHTML =
+      "❌ SERVER TIMEOUT";
+    setTimeout(function() {
+      processing = false;
+      document.getElementById("result").className = "";
+      document.getElementById("result").innerHTML =
+        "📷 Ready for next QR";
+      startScanner();
+    }, 2500);
+  }, 8000);
 }
-
-
+/* SHOW RESULT */
 function showResult(result) {
-
   const box =
     document.getElementById("result");
-
-
   if (result.success) {
-
     box.className = "allowed";
-
     box.innerHTML =
       "<div>✅ ENTRY ALLOWED</div>" +
       "<div class='name'>" +
@@ -190,45 +183,30 @@ function showResult(result) {
       result.passId +
       "</div>" +
       "<div>Payment: PAID</div>";
-
   } else {
-
     box.className = "denied";
-
     let html =
       "<div>❌ " +
       result.message +
       "</div>";
-
     if (result.name) {
-
       html +=
         "<div class='name'>" +
         result.name +
         "</div>";
-
     }
-
     if (result.passId) {
-
       html +=
         "<div class='pass'>" +
         "Pass ID: " +
         result.passId +
         "</div>";
-
     }
-
     box.innerHTML = html;
-
   }
-
 }
-
-
+/* START */
 startScanner();
-
 </script>
-
 </body>
 </html>
