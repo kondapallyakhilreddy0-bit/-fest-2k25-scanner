@@ -12,12 +12,8 @@
       padding: 20px;
       background: #f5f5f5;
     }
-    h1 {
-      margin: 5px;
-    }
-    h2 {
-      margin: 5px 0 20px;
-    }
+    h1 { margin: 5px; }
+    h2 { margin: 5px 0 20px; }
     #reader {
       width: 100%;
       max-width: 450px;
@@ -63,9 +59,7 @@ const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbypJ4FqT8xtThzpohlhwwPF8Om_LHH7ZNBFwYYHjRbJkS6jdX2TBqKUX_0BJ0IdSBqG/exec";
 let scanner = null;
 let processing = false;
-/* =========================
-   START SCANNER
-========================= */
+/* START CAMERA */
 function startScanner() {
   scanner = new Html5Qrcode("reader");
   scanner.start(
@@ -83,13 +77,6 @@ function startScanner() {
       document.getElementById("result").className = "";
       document.getElementById("result").innerHTML =
         "🔍 Checking...";
-      /*
-       * Don't wait for camera stop.
-       * Immediately send QR to Apps Script.
-       */
-      try {
-        scanner.stop().catch(function() {});
-      } catch (e) {}
       checkPass(decodedText);
     },
     function(errorMessage) {
@@ -105,9 +92,7 @@ function startScanner() {
       "❌ CAMERA ERROR<br><br>" + error;
   });
 }
-/* =========================
-   CHECK PASS
-========================= */
+/* CHECK PASS */
 function checkPass(passId) {
   const callbackName =
     "qrCallback_" + Date.now();
@@ -133,6 +118,25 @@ function checkPass(passId) {
     encodeURIComponent(passId) +
     "&callback=" +
     callbackName;
+  script.onload = function() {
+    setTimeout(function() {
+      if (!completed) {
+        completed = true;
+        delete window[callbackName];
+        document.getElementById("result").className =
+          "denied";
+        document.getElementById("result").innerHTML =
+          "❌ SERVER DID NOT RESPOND";
+        setTimeout(function() {
+          processing = false;
+          document.getElementById("result").className = "";
+          document.getElementById("result").innerHTML =
+            "📷 Ready for next QR";
+          startScanner();
+        }, 2500);
+      }
+    }, 5000);
+  };
   script.onerror = function() {
     if (completed) return;
     completed = true;
@@ -150,29 +154,8 @@ function checkPass(passId) {
     }, 2500);
   };
   document.body.appendChild(script);
-  /*
-   * Server timeout protection
-   */
-  setTimeout(function() {
-    if (completed) return;
-    completed = true;
-    delete window[callbackName];
-    document.getElementById("result").className =
-      "denied";
-    document.getElementById("result").innerHTML =
-      "❌ SERVER TIMEOUT";
-    setTimeout(function() {
-      processing = false;
-      document.getElementById("result").className = "";
-      document.getElementById("result").innerHTML =
-        "📷 Ready for next QR";
-      startScanner();
-    }, 2500);
-  }, 8000);
 }
-/* =========================
-   SHOW RESULT
-========================= */
+/* SHOW RESULT */
 function showResult(result) {
   const box =
     document.getElementById("result");
@@ -188,8 +171,7 @@ function showResult(result) {
       result.passId +
       "</div>" +
       "<div>Payment: PAID</div>";
-  }
-  else {
+  } else {
     box.className = "denied";
     let html =
       "<div>❌ " +
@@ -211,9 +193,7 @@ function showResult(result) {
     box.innerHTML = html;
   }
 }
-/* =========================
-   START
-========================= */
+/* START */
 startScanner();
 </script>
 </body>
